@@ -74,7 +74,7 @@ fun Application.module() {
                     playerName
                 )
 
-                send(json.encodeToString(GameMessage.RoomStateUpdate(createdRoom)))
+                send(json.encodeToString<GameMessage>(GameMessage.RoomStateUpdate(createdRoom)))
 
                 createdRoom
 
@@ -84,7 +84,7 @@ fun Application.module() {
             }
 
             if (room == null) {
-                send(json.encodeToString(GameMessage.Error("Room not found")))
+                send(json.encodeToString<GameMessage>(GameMessage.Error("Room not found")))
                 close()
                 return@webSocket
             }
