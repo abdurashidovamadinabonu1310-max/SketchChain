@@ -11,11 +11,11 @@ object AppConfig {
     // 🌍 FOR GOOGLE PLAY (PRODUCTION):
     // You must host your server on a cloud provider (e.g., Render, Heroku, AWS, Railway)
     // Once hosted, paste your secure WebSocket URL here (must start with wss://)
-    // Example: const val SERVER_URL = "wss://sketchchain-server.onrender.com"
+    const val SERVER_URL = "wss://sketchchain.onrender.com" 
 
     // 🏠 FOR LOCAL TESTING:
     // Use your laptop's local IP address and port 8080 (must be on same Wi-Fi)
-    const val SERVER_URL = "ws://192.168.1.28:8080" 
+    // const val SERVER_URL = "ws://192.168.1.28:8080" 
 }
 
 class GameViewModel : ViewModel() {
