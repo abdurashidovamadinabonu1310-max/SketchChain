@@ -11,7 +11,9 @@ import androidx.compose.ui.graphics.Color
 @Composable
 fun HomeScreen(
     onJoinRoom: (roomId: String, playerName: String) -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    errorMessage: String?,
+    onClearError: () -> Unit
 ) {
     var playerName by remember { mutableStateOf("") }
     var roomId by remember { mutableStateOf("") }
@@ -35,10 +37,22 @@ fun HomeScreen(
 
         OutlinedTextField(
             value = roomId,
-            onValueChange = { roomId = it },
+            onValueChange = { 
+                roomId = it
+                if (errorMessage != null) onClearError()
+            },
             label = { Text("Room Code (leave empty to create new)") },
             modifier = Modifier.fillMaxWidth()
         )
+
+        if (errorMessage != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = errorMessage,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 

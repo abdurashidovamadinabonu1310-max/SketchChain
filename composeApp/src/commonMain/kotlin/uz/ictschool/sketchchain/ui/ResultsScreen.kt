@@ -10,7 +10,7 @@ import uz.ictschool.sketchchain.shared.EntryType
 import uz.ictschool.sketchchain.shared.Game
 
 @Composable
-fun ResultsScreen(game: Game?) {
+fun ResultsScreen(game: Game?, onBackToHome: () -> Unit) {
     if (game == null) return
 
     Column(
@@ -41,7 +41,7 @@ fun ResultsScreen(game: Game?) {
         Spacer(modifier = Modifier.weight(1f))
         
         Button(
-            onClick = { /* Return to Home */ },
+            onClick = onBackToHome,
             modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
             Text("Back to Home")

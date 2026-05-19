@@ -97,7 +97,12 @@ class GameClient(private val serverUrl: String) {
         }
     }
 
-    fun disconnect() {
-        client.close()
+    suspend fun disconnect() {
+        try {
+            session?.close(CloseReason(CloseReason.Codes.NORMAL, "User disconnected"))
+            session = null
+        } catch (e: Exception) {
+            println("❌ Error disconnecting: ${e.message}")
+        }
     }
 }

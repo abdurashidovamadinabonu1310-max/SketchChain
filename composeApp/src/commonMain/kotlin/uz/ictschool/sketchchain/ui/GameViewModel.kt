@@ -34,6 +34,9 @@ class GameViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     private var myPlayerId: String = ""
 
     init {
@@ -49,6 +52,7 @@ class GameViewModel : ViewModel() {
                     is GameMessage.NextTurnAssignment -> _currentAssignment.value = msg
                     is GameMessage.Error -> {
                         _isLoading.value = false
+                        _errorMessage.value = msg.message
                         println("❌ Server Error: ${msg.message}")
                     }
                     else -> {}
@@ -68,6 +72,7 @@ class GameViewModel : ViewModel() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isLoading.value = false
+                _errorMessage.value = e.message ?: "Failed to connect"
                 println("❌ Connection failed: ${e.message}")
             }
         }
@@ -89,6 +94,21 @@ class GameViewModel : ViewModel() {
         viewModelScope.launch {
             client.sendMessage(GameMessage.SubmitTurn(room.id, assignment.chainId, entry))
             _currentAssignment.value = null
+        }
+    }
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
+    fun resetGame() {
+        viewModelScope.launch {
+            client.disconnect()
+            _roomState.value = null
+            _gameState.value = null
+            _currentAssignment.value = null
+            _isLoading.value = false
+            _errorMessage.value = null
         }
     }
 

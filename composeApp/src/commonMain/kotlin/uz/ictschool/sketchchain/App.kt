@@ -12,9 +12,9 @@ import uz.ictschool.sketchchain.ui.*
 fun App() {
     val viewModel = remember { GameViewModel() }
 
-
     val roomState by viewModel.roomState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
     val assignment by viewModel.currentAssignment.collectAsState()
     val gameState by viewModel.gameState.collectAsState()
 
@@ -26,12 +26,30 @@ fun App() {
                         onJoinRoom = { roomId, playerName ->
                             viewModel.joinRoom(roomId, playerName)
                         },
-                        isLoading = isLoading
+                        isLoading = isLoading,
+                        errorMessage = errorMessage,
+                        onClearError = { viewModel.clearError() }
                     )
                 }
                 roomState?.status == RoomStatus.LOBBY -> {
-                    // LobbyScreen...
-                    Text("In Lobby - Coming soon")
+                    LobbyScreen(
+                        room = roomState,
+                        myPlayerId = viewModel.getMyPlayerId(),
+                        onStartGame = { viewModel.startGame() }
+                    )
+                }
+                roomState?.status == RoomStatus.PLAYING -> {
+                    GameScreen(
+                        myPlayerId = viewModel.getMyPlayerId(),
+                        assignment = assignment,
+                        onSubmitTurn = { viewModel.submitTurn(it) }
+                    )
+                }
+                roomState?.status == RoomStatus.FINISHED -> {
+                    ResultsScreen(
+                        game = gameState,
+                        onBackToHome = { viewModel.resetGame() }
+                    )
                 }
                 else -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
