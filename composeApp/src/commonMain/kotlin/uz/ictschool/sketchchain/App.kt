@@ -8,6 +8,8 @@ import androidx.compose.ui.Modifier
 import uz.ictschool.sketchchain.shared.RoomStatus
 import uz.ictschool.sketchchain.ui.*
 
+import uz.ictschool.sketchchain.ui.theme.SketchChainTheme
+
 @Composable
 fun App() {
     val viewModel = remember { GameViewModel() }
@@ -18,7 +20,7 @@ fun App() {
     val assignment by viewModel.currentAssignment.collectAsState()
     val gameState by viewModel.gameState.collectAsState()
 
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    SketchChainTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
             when {
                 roomState == null -> {
