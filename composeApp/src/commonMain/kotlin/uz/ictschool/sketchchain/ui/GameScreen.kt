@@ -8,8 +8,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -33,125 +35,143 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import uz.ictschool.sketchchain.shared.*
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Colour helpers ────────────────────────────────────────────────────────────
 
-private fun hexToColor(hex: String): Color {
-    return try {
-        val cleaned = hex.removePrefix("#")
-        val full = if (cleaned.length == 6) "ff$cleaned" else cleaned
-        val argb = full.toLong(16)
-        Color(
-            alpha = ((argb shr 24) and 0xFF).toFloat() / 255f,
-            red   = ((argb shr 16) and 0xFF).toFloat() / 255f,
-            green = ((argb shr 8)  and 0xFF).toFloat() / 255f,
-            blue  = (argb          and 0xFF).toFloat() / 255f
-        )
-    } catch (e: Exception) { Color.Black }
-}
+private fun hexToColor(hex: String): Color = try {
+    val c = hex.removePrefix("#")
+    val full = if (c.length == 6) "ff$c" else c
+    val v = full.toLong(16)
+    Color(
+        alpha = ((v shr 24) and 0xFF).toFloat() / 255f,
+        red   = ((v shr 16) and 0xFF).toFloat() / 255f,
+        green = ((v shr  8) and 0xFF).toFloat() / 255f,
+        blue  = ( v         and 0xFF).toFloat() / 255f
+    )
+} catch (_: Exception) { Color.Black }
 
-private fun DrawScope.renderStrokes(strokes: List<DrawingStroke>, scaleX: Float = 1f, scaleY: Float = 1f) {
+private fun DrawScope.renderStrokes(
+    strokes: List<DrawingStroke>,
+    scaleX: Float = 1f,
+    scaleY: Float = 1f
+) {
     strokes.forEach { stroke ->
         if (stroke.points.size < 2) return@forEach
         val path = Path()
         path.moveTo(stroke.points[0].x * scaleX, stroke.points[0].y * scaleY)
         stroke.points.drop(1).forEach { pt -> path.lineTo(pt.x * scaleX, pt.y * scaleY) }
-        val color = if (stroke.isEraser) Color.White else hexToColor(stroke.colorHex)
         drawPath(
-            path = path,
-            color = color,
+            path  = path,
+            color = if (stroke.isEraser) Color.White else hexToColor(stroke.colorHex),
             style = Stroke(width = stroke.strokeWidth, cap = StrokeCap.Round, join = StrokeJoin.Round)
         )
     }
 }
 
-// Reusable composable that renders a saved DrawingData inside a white surface
+/** Renders a previously-saved [DrawingData] JSON string. Used both in-game and on results screen. */
 @Composable
 fun DrawingView(content: String, modifier: Modifier = Modifier) {
-    val drawingData = remember(content) {
-        try { Json.decodeFromString<DrawingData>(content) } catch (e: Exception) { null }
+    val data = remember(content) {
+        try { Json.decodeFromString<DrawingData>(content) } catch (_: Exception) { null }
     }
     Surface(color = Color.White, shape = RoundedCornerShape(16.dp), modifier = modifier) {
-        if (drawingData == null || drawingData.strokes.isEmpty()) {
+        if (data == null || data.strokes.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("[ Empty drawing ]", color = Color.Gray)
+                Text("[ Empty drawing ]", color = Color.LightGray)
             }
         } else {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val sx = if (drawingData.canvasWidth  > 0) size.width  / drawingData.canvasWidth  else 1f
-                val sy = if (drawingData.canvasHeight > 0) size.height / drawingData.canvasHeight else 1f
-                renderStrokes(drawingData.strokes, sx, sy)
+            Canvas(Modifier.fillMaxSize()) {
+                val sx = if (data.canvasWidth  > 0) size.width  / data.canvasWidth  else 1f
+                val sy = if (data.canvasHeight > 0) size.height / data.canvasHeight else 1f
+                renderStrokes(data.strokes, sx, sy)
             }
         }
     }
 }
 
-// ── Color palette definition ──────────────────────────────────────────────────
-private data class PaletteColor(val hex: String, val color: Color)
+// ── Palette ───────────────────────────────────────────────────────────────────
+
+private data class Swatch(val hex: String, val color: Color)
 
 private val PALETTE = listOf(
-    PaletteColor("#FF000000", Color.Black),
-    PaletteColor("#FFFFFFFF", Color.White),
-    PaletteColor("#FFFF6B6B", Color(0xFFFF6B6B)),
-    PaletteColor("#FFFF9800", Color(0xFFFF9800)),
-    PaletteColor("#FFFFE135", Color(0xFFFFE135)),
-    PaletteColor("#FF4CAF50", Color(0xFF4CAF50)),
-    PaletteColor("#FF2196F3", Color(0xFF2196F3)),
-    PaletteColor("#FF4ECDC4", Color(0xFF4ECDC4)),
-    PaletteColor("#FFC792EA", Color(0xFFC792EA)),
-    PaletteColor("#FF795548", Color(0xFF795548)),
+    Swatch("#FF000000", Color.Black),
+    Swatch("#FFFFFFFF", Color.White),
+    Swatch("#FFFF6B6B", Color(0xFFFF6B6B)),
+    Swatch("#FFFF9800", Color(0xFFFF9800)),
+    Swatch("#FFFFE135", Color(0xFFFFE135)),
+    Swatch("#FF4CAF50", Color(0xFF4CAF50)),
+    Swatch("#FF2196F3", Color(0xFF2196F3)),
+    Swatch("#FF4ECDC4", Color(0xFF4ECDC4)),
+    Swatch("#FFC792EA", Color(0xFFC792EA)),
+    Swatch("#FF795548", Color(0xFF795548)),
 )
 
-// ── Main GameScreen ───────────────────────────────────────────────────────────
+// ── Main screen ───────────────────────────────────────────────────────────────
+
 @Composable
 fun GameScreen(
     myPlayerId: String,
     assignment: GameMessage.NextTurnAssignment?,
     onSubmitTurn: (ChainEntry) -> Unit
 ) {
+    // Waiting state
     if (assignment == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
                 Text(
-                    "Waiting for other players...",
+                    "Waiting for other players…",
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.secondary
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     "Hang tight while everyone finishes their turn",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp)
                 )
             }
         }
         return
     }
 
+    val isFirstRound = assignment.previousEntry == null
+    val isTextTurn   = assignment.expectedType == EntryType.TEXT
+
+    val headerText = when {
+        isTextTurn && isFirstRound -> "Write any sentence"
+        isTextTurn                 -> "Describe the drawing"
+        else                       -> "Draw this sentence"
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header banner
-        val isFirstRound = assignment.previousEntry == null
-        val headerText = when {
-            assignment.expectedType == EntryType.TEXT && isFirstRound -> "WRITE ANY SENTENCE"
-            assignment.expectedType == EntryType.TEXT -> "DESCRIBE THE DRAWING"
-            else -> "DRAW THIS SENTENCE"
-        }
+        Spacer(Modifier.height(8.dp))
 
+        // Header
         Surface(
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(16.dp),
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(
                 text = headerText,
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp
                 ),
                 color = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.padding(vertical = 14.dp),
@@ -159,96 +179,93 @@ fun GameScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
 
-        // Previous entry card (only if not the very first round)
+        // Previous entry card
         assignment.previousEntry?.let { prev ->
             Surface(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "PREVIOUS PLAYER'S ENTRY:",
-                        style = MaterialTheme.typography.labelMedium.copy(
+                        "PREVIOUS ENTRY",
+                        style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.tertiary,
-                            letterSpacing = 1.sp
+                            letterSpacing = 1.5.sp
                         )
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     if (prev.type == EntryType.TEXT) {
                         Text(
-                            text = "\"${prev.content}\"",
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            "\"${prev.content}\"",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
                             textAlign = TextAlign.Center
                         )
                     } else {
-                        // Show the actual drawing from previous player
                         DrawingView(
                             content = prev.content,
-                            modifier = Modifier.fillMaxWidth().height(160.dp)
+                            modifier = Modifier.fillMaxWidth().height(150.dp)
                         )
                     }
                 }
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
         }
 
-        // ── TEXT MODE ────────────────────────────────────────────────────────
-        if (assignment.expectedType == EntryType.TEXT) {
-            var textEntry by remember { mutableStateOf("") }
+        // ── TEXT mode ─────────────────────────────────────────────────────────
+        if (isTextTurn) {
+            var text by remember { mutableStateOf("") }
 
             OutlinedTextField(
-                value = textEntry,
-                onValueChange = { textEntry = it },
+                value = text,
+                onValueChange = { text = it },
                 label = {
-                    Text(if (isFirstRound) "Write anything that comes to mind!" else "What do you see in the drawing?")
+                    Text(if (isFirstRound) "Write anything…" else "What do you see?")
                 },
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier.fillMaxWidth().weight(1f),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .imePadding(),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = MaterialTheme.colorScheme.primary,
                     unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
                 )
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Button(
-                onClick = {
-                    onSubmitTurn(ChainEntry(myPlayerId, EntryType.TEXT, textEntry.trim()))
-                },
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(32.dp),
-                enabled = textEntry.isNotBlank(),
+                onClick = { onSubmitTurn(ChainEntry(myPlayerId, EntryType.TEXT, text.trim())) },
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
+                enabled = text.isNotBlank(),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = MaterialTheme.colorScheme.onSecondary
                 )
             ) {
-                Text("SUBMIT", style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Black, letterSpacing = 2.sp
-                ))
+                Text("Submit", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             }
 
-        // ── DRAWING MODE ──────────────────────────────────────────────────────
+        // ── DRAWING mode ──────────────────────────────────────────────────────
         } else {
-            // mutableStateListOf so add/remove immediately triggers recomposition
-            val strokes = remember { mutableStateListOf<DrawingStroke>() }
+            val strokes       = remember { mutableStateListOf<DrawingStroke>() }
             val currentPoints = remember { mutableStateListOf<DrawingPoint>() }
-            var selectedColorHex by remember { mutableStateOf("#FF000000") }
-            var isEraser by remember { mutableStateOf(false) }
-            var canvasSize by remember { mutableStateOf(Size.Zero) }
+            var selectedHex   by remember { mutableStateOf("#FF000000") }
+            var isEraser      by remember { mutableStateOf(false) }
+            var canvasSize    by remember { mutableStateOf(Size.Zero) }
 
-            // White drawing surface
+            // Drawing surface
             Surface(
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
                 color = Color.White,
                 modifier = Modifier.weight(1f).fillMaxWidth()
             ) {
@@ -256,7 +273,7 @@ fun GameScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .onSizeChanged { canvasSize = Size(it.width.toFloat(), it.height.toFloat()) }
-                        .pointerInput(isEraser, selectedColorHex) {
+                        .pointerInput(isEraser, selectedHex) {
                             detectDragGestures(
                                 onDragStart = { offset ->
                                     currentPoints.clear()
@@ -267,36 +284,31 @@ fun GameScreen(
                                 },
                                 onDragEnd = {
                                     if (currentPoints.isNotEmpty()) {
-                                        strokes.add(
-                                            DrawingStroke(
-                                                points = currentPoints.toList(),
-                                                colorHex = selectedColorHex,
-                                                strokeWidth = if (isEraser) 40f else 8f,
-                                                isEraser = isEraser
-                                            )
-                                        )
+                                        strokes.add(DrawingStroke(
+                                            points      = currentPoints.toList(),
+                                            colorHex    = selectedHex,
+                                            strokeWidth = if (isEraser) 40f else 8f,
+                                            isEraser    = isEraser
+                                        ))
                                         currentPoints.clear()
                                     }
                                 }
                             )
                         }
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        // Draw all committed strokes
+                    Canvas(Modifier.fillMaxSize()) {
                         renderStrokes(strokes)
-                        // Draw the stroke currently being drawn
                         if (currentPoints.size >= 2) {
                             val path = Path()
                             path.moveTo(currentPoints[0].x, currentPoints[0].y)
-                            currentPoints.drop(1).forEach { pt -> path.lineTo(pt.x, pt.y) }
-                            val col = if (isEraser) Color.White else hexToColor(selectedColorHex)
+                            currentPoints.drop(1).forEach { path.lineTo(it.x, it.y) }
                             drawPath(
-                                path = path,
-                                color = col,
+                                path  = path,
+                                color = if (isEraser) Color.White else hexToColor(selectedHex),
                                 style = Stroke(
                                     width = if (isEraser) 40f else 8f,
-                                    cap = StrokeCap.Round,
-                                    join = StrokeJoin.Round
+                                    cap   = StrokeCap.Round,
+                                    join  = StrokeJoin.Round
                                 )
                             )
                         }
@@ -304,95 +316,78 @@ fun GameScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // ── Color palette ─────────────────────────────────────────────────
+            // Colour palette row
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp)
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp)
             ) {
-                items(PALETTE) { pc ->
-                    val isSelected = !isEraser && selectedColorHex == pc.hex
+                items(PALETTE) { sw ->
+                    val sel = !isEraser && selectedHex == sw.hex
                     Box(
                         modifier = Modifier
-                            .size(if (isSelected) 38.dp else 32.dp)
+                            .size(if (sel) 36.dp else 30.dp)
                             .clip(CircleShape)
-                            .background(pc.color)
-                            .then(
-                                if (isSelected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                                else if (pc.hex == "#FFFFFFFF") Modifier.border(1.dp, Color.LightGray, CircleShape)
-                                else Modifier
-                            )
-                            .clickable {
-                                selectedColorHex = pc.hex
-                                isEraser = false
-                            }
+                            .background(sw.color)
+                            .then(when {
+                                sel            -> Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                                sw.hex == "#FFFFFFFF" -> Modifier.border(1.dp, Color.LightGray, CircleShape)
+                                else           -> Modifier
+                            })
+                            .clickable { selectedHex = sw.hex; isEraser = false }
                     )
                 }
-                // Eraser swatch
+                // Eraser
                 item {
-                    val eraserSelected = isEraser
                     Surface(
-                        shape = CircleShape,
-                        color = if (eraserSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                        shape  = CircleShape,
+                        color  = if (isEraser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
                         modifier = Modifier
-                            .size(if (eraserSelected) 38.dp else 32.dp)
+                            .size(if (isEraser) 36.dp else 30.dp)
                             .clickable { isEraser = true }
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text("⌫", fontSize = 14.sp)
-                        }
+                        Box(contentAlignment = Alignment.Center) { Text("⌫", fontSize = 13.sp) }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(Modifier.height(8.dp))
 
-            // Undo / Clear row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            // Undo / Clear
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
                     onClick = { if (strokes.isNotEmpty()) strokes.removeAt(strokes.lastIndex) },
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onBackground)
+                    shape  = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) { Text("Undo") }
 
                 OutlinedButton(
                     onClick = { strokes.clear() },
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onBackground)
+                    shape  = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f)
                 ) { Text("Clear") }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
 
-            // Submit drawing — serialize strokes as JSON
             Button(
                 onClick = {
-                    val drawingData = DrawingData(
-                        strokes = strokes.toList(),
-                        canvasWidth = canvasSize.width,
-                        canvasHeight = canvasSize.height
-                    )
-                    val json = Json.encodeToString(drawingData)
-                    onSubmitTurn(ChainEntry(myPlayerId, EntryType.IMAGE, json))
+                    val data = DrawingData(strokes.toList(), canvasSize.width, canvasSize.height)
+                    onSubmitTurn(ChainEntry(myPlayerId, EntryType.IMAGE, Json.encodeToString(data)))
                 },
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(32.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary
+                    contentColor   = MaterialTheme.colorScheme.onSecondary
                 )
             ) {
-                Text("SUBMIT DRAWING", style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Black, letterSpacing = 2.sp
-                ))
+                Text("Submit Drawing", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
             }
         }
+
+        Spacer(Modifier.height(8.dp))
     }
 }

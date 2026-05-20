@@ -1,6 +1,8 @@
 package uz.ictschool.sketchchain.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -31,30 +33,30 @@ fun LobbyScreen(
     val clipboardManager = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
 
+    // statusBarsPadding → content clears the status bar at the top
+    // navigationBarsPadding → content clears the nav bar at the bottom
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        Spacer(modifier = Modifier.height(12.dp))
+
         // ── Top bar ───────────────────────────────────────────────────────────
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedButton(
+            TextButton(
                 onClick = onLeaveRoom,
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    // keep default width but tint it red
-                ),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp)
             ) {
                 Text(
                     "← Leave",
+                    color = MaterialTheme.colorScheme.error,
                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                 )
             }
@@ -64,69 +66,54 @@ fun LobbyScreen(
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center
             )
-            // Balance spacer matching the Leave button width roughly
-            Spacer(modifier = Modifier.width(72.dp))
+            Spacer(modifier = Modifier.width(64.dp))
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // ── Room code card ────────────────────────────────────────────────────
         Text(
-            text = "SHARE THIS CODE",
-            style = MaterialTheme.typography.labelLarge.copy(
+            text = "ROOM CODE",
+            style = MaterialTheme.typography.labelMedium.copy(
                 color = MaterialTheme.colorScheme.secondary,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 2.sp
             )
         )
-
         Spacer(modifier = Modifier.height(8.dp))
 
         Surface(
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(vertical = 24.dp)
+                modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp)
             ) {
                 Text(
                     text = room.id,
-                    style = MaterialTheme.typography.displayLarge.copy(
+                    style = MaterialTheme.typography.displayMedium.copy(
                         fontWeight = FontWeight.Black,
-                        fontSize = 64.sp,
-                        letterSpacing = 8.sp,
+                        letterSpacing = 10.sp,
                         color = MaterialTheme.colorScheme.tertiary
                     ),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
+                    textAlign = TextAlign.Center
                 )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Copy button
-                OutlinedButton(
+                Spacer(modifier = Modifier.height(10.dp))
+                FilledTonalButton(
                     onClick = {
                         clipboardManager.setText(AnnotatedString(room.id))
                         copied = true
                     },
                     shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = if (copied)
-                            MaterialTheme.colorScheme.secondary
-                        else
-                            MaterialTheme.colorScheme.tertiary
-                    ),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 24.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = if (copied) "✓ Copied!" else "Copy Code",
+                        text = if (copied) "✓  Copied!" else "Copy Code",
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 }
-
-                // Reset "Copied" label after navigation
                 LaunchedEffect(copied) {
                     if (copied) {
                         kotlinx.coroutines.delay(2000)
@@ -136,67 +123,83 @@ fun LobbyScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(28.dp))
+        Spacer(modifier = Modifier.height(20.dp))
 
         // ── Player list ───────────────────────────────────────────────────────
-        Text(
-            text = "Players (${room.players.size})",
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.align(Alignment.Start)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Players",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
+            )
+            Spacer(Modifier.width(8.dp))
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            ) {
+                Text(
+                    text = "${room.players.size}",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 2.dp),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                )
+            }
+        }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        Column(modifier = Modifier.weight(1f)) {
-            room.players.forEach { player ->
+        LazyColumn(modifier = Modifier.weight(1f)) {
+            items(room.players) { player ->
                 val isMe   = player.id == myPlayerId
                 val isHost = player.id == room.hostId
 
                 Surface(
-                    shape = RoundedCornerShape(24.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = if (isMe)
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     else
                         MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp)
+                        .padding(vertical = 4.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = player.name,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                             modifier = Modifier.weight(1f)
                         )
-
                         if (isMe) {
                             Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
                                 shape = RoundedCornerShape(50)
                             ) {
                                 Text(
-                                    text = "YOU",
+                                    "YOU",
                                     color = MaterialTheme.colorScheme.primary,
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                 )
                             }
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(Modifier.width(6.dp))
                         }
-
                         if (isHost) {
                             Surface(
                                 color = MaterialTheme.colorScheme.tertiary,
                                 shape = RoundedCornerShape(50)
                             ) {
                                 Text(
-                                    text = "HOST",
+                                    "HOST",
                                     color = MaterialTheme.colorScheme.onTertiary,
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Black),
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                                 )
                             }
                         }
@@ -205,57 +208,45 @@ fun LobbyScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Action button ─────────────────────────────────────────────────────
+        // ── Bottom actions ────────────────────────────────────────────────────
         if (myPlayerId == room.hostId) {
             Button(
                 onClick = onStartGame,
-                modifier = Modifier.fillMaxWidth().height(64.dp),
-                shape = RoundedCornerShape(32.dp),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(16.dp),
                 enabled = room.players.size >= 2,
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    disabledContainerColor = MaterialTheme.colorScheme.surface,
+                    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
                     disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             ) {
                 Text(
-                    "START GAME",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp
-                    )
-                )
-            }
-            if (room.players.size < 2) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Need at least 2 players to start",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.secondary,
-                    textAlign = TextAlign.Center
+                    if (room.players.size >= 2) "Start Game" else "Need ≥ 2 players to start",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
         } else {
             Surface(
-                shape = RoundedCornerShape(32.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth().height(64.dp)
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth().height(56.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        "Waiting for host to start...",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        "Waiting for host to start…",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        // Prominent leave button at the bottom for non-hosts too
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+
         TextButton(
             onClick = onLeaveRoom,
             modifier = Modifier.fillMaxWidth()
@@ -263,8 +254,10 @@ fun LobbyScreen(
             Text(
                 "Leave Room",
                 color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
             )
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
     }
 }
