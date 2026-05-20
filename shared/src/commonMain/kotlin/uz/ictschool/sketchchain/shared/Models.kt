@@ -1,5 +1,6 @@
 package uz.ictschool.sketchchain.shared
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -31,7 +32,7 @@ enum class EntryType {
 data class ChainEntry(
     val playerId: String,
     val type: EntryType,
-    val content: String // Either text sentence or image Base64/URL
+    val content: String
 )
 
 @Serializable
@@ -50,27 +51,39 @@ data class Game(
     val totalRounds: Int
 )
 
-// WebSocket Message sealed class for communication between Server and Client
+/**
+ * All messages sent over the WebSocket between server and clients.
+ * @SerialName makes the type discriminator short and explicit — required for
+ * reliable cross-platform polymorphic deserialization.
+ */
 @Serializable
 sealed class GameMessage {
+
     @Serializable
-    data class JoinRoom(val player: Player, val roomId: String) : GameMessage()
-    
-    @Serializable
+    @SerialName("StartGame")
     data class StartGame(val roomId: String) : GameMessage()
-    
+
     @Serializable
+    @SerialName("SubmitTurn")
     data class SubmitTurn(val roomId: String, val chainId: String, val entry: ChainEntry) : GameMessage()
-    
+
     @Serializable
+    @SerialName("RoomStateUpdate")
     data class RoomStateUpdate(val room: Room) : GameMessage()
-    
+
     @Serializable
+    @SerialName("GameStateUpdate")
     data class GameStateUpdate(val game: Game) : GameMessage()
-    
+
     @Serializable
-    data class NextTurnAssignment(val chainId: String, val expectedType: EntryType, val previousEntry: ChainEntry?) : GameMessage()
-    
+    @SerialName("NextTurnAssignment")
+    data class NextTurnAssignment(
+        val chainId: String,
+        val expectedType: EntryType,
+        val previousEntry: ChainEntry?
+    ) : GameMessage()
+
     @Serializable
+    @SerialName("Error")
     data class Error(val message: String) : GameMessage()
 }

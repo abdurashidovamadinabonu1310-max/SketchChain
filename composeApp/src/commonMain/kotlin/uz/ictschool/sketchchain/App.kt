@@ -15,6 +15,7 @@ fun App() {
 
     val roomState by viewModel.roomState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val loadingMessage by viewModel.loadingMessage.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val assignment by viewModel.currentAssignment.collectAsState()
     val gameState by viewModel.gameState.collectAsState()
@@ -24,13 +25,10 @@ fun App() {
             when {
                 roomState == null -> {
                     HomeScreen(
-                        onCreateRoom = { playerName ->
-                            viewModel.createRoom(playerName)
-                        },
-                        onJoinRoom = { roomId, playerName ->
-                            viewModel.joinRoom(roomId, playerName)
-                        },
+                        onCreateRoom = { playerName -> viewModel.createRoom(playerName) },
+                        onJoinRoom = { roomId, playerName -> viewModel.joinRoom(roomId, playerName) },
                         isLoading = isLoading,
+                        loadingMessage = loadingMessage,
                         errorMessage = errorMessage,
                         onClearError = { viewModel.clearError() }
                     )
