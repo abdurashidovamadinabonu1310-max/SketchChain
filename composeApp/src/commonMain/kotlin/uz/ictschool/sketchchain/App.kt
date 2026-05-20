@@ -7,7 +7,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import uz.ictschool.sketchchain.shared.RoomStatus
 import uz.ictschool.sketchchain.ui.*
-
 import uz.ictschool.sketchchain.ui.theme.SketchChainTheme
 
 @Composable
@@ -25,6 +24,9 @@ fun App() {
             when {
                 roomState == null -> {
                     HomeScreen(
+                        onCreateRoom = { playerName ->
+                            viewModel.createRoom(playerName)
+                        },
                         onJoinRoom = { roomId, playerName ->
                             viewModel.joinRoom(roomId, playerName)
                         },
@@ -37,7 +39,8 @@ fun App() {
                     LobbyScreen(
                         room = roomState,
                         myPlayerId = viewModel.getMyPlayerId(),
-                        onStartGame = { viewModel.startGame() }
+                        onStartGame = { viewModel.startGame() },
+                        onLeaveRoom = { viewModel.leaveRoom() }
                     )
                 }
                 roomState?.status == RoomStatus.PLAYING -> {

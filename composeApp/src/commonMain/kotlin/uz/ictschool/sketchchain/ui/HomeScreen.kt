@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun HomeScreen(
+    onCreateRoom: (playerName: String) -> Unit,
     onJoinRoom: (roomId: String, playerName: String) -> Unit,
     isLoading: Boolean,
     errorMessage: String?,
@@ -42,7 +43,7 @@ fun HomeScreen(
                 color = MaterialTheme.colorScheme.secondary
             )
         )
-        
+
         Spacer(modifier = Modifier.height(64.dp))
 
         OutlinedTextField(
@@ -54,24 +55,27 @@ fun HomeScreen(
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            ),
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
             value = roomId,
-            onValueChange = { 
-                roomId = it.uppercase()
+            onValueChange = {
+                roomId = it.uppercase().filter { c -> c.isLetter() }.take(6)
                 if (errorMessage != null) onClearError()
             },
-            label = { Text("Room Code (Leave empty for new)") },
+            label = { Text("Room Code") },
+            placeholder = { Text("Leave empty to create") },
             shape = RoundedCornerShape(24.dp),
             modifier = Modifier.fillMaxWidth(),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
                 unfocusedBorderColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            ),
+            singleLine = true
         )
 
         if (errorMessage != null) {
@@ -82,9 +86,9 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = errorMessage,
+                    text = "⚠️ $errorMessage",
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    modifier = Modifier.padding(12.dp),
+                    modifier = Modifier.padding(14.dp),
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -92,34 +96,48 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        Button(
-            onClick = {
-                val finalRoomId = if (roomId.isBlank()) generateRandomRoomId() else roomId
-                onJoinRoom(finalRoomId, playerName.ifBlank { "Player" })
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(64.dp),
-            shape = RoundedCornerShape(32.dp),
-            enabled = !isLoading && playerName.isNotBlank(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            )
-        ) {
-            if (isLoading) {
-                CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
-            } else {
-                Text(
-                    text = if (roomId.isBlank()) "Create New Game" else "Join Game",
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+        if (roomId.isBlank()) {
+            // Create button
+            Button(
+                onClick = { onCreateRoom(playerName.ifBlank { "Player" }) },
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                shape = RoundedCornerShape(32.dp),
+                enabled = !isLoading && playerName.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
                 )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
+                } else {
+                    Text(
+                        "Create New Game",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
+            }
+        } else {
+            // Join button
+            Button(
+                onClick = { onJoinRoom(roomId.trim(), playerName.ifBlank { "Player" }) },
+                modifier = Modifier.fillMaxWidth().height(64.dp),
+                shape = RoundedCornerShape(32.dp),
+                enabled = !isLoading && playerName.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary,
+                    contentColor = MaterialTheme.colorScheme.onSecondary
+                )
+            ) {
+                if (isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
+                } else {
+                    Text(
+                        "Join Game",
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+                    )
+                }
             }
         }
     }
-}
-
-private fun generateRandomRoomId(): String {
-    val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-    return (1..4).map { chars.random() }.joinToString("")
 }

@@ -9,13 +9,10 @@ import uz.ictschool.sketchchain.shared.*
 
 object AppConfig {
     // 🌍 FOR GOOGLE PLAY (PRODUCTION):
-    // You must host your server on a cloud provider (e.g., Render, Heroku, AWS, Railway)
-    // Once hosted, paste your secure WebSocket URL here (must start with wss://)
-    const val SERVER_URL = "wss://sketchchain.onrender.com" 
+    const val SERVER_URL = "wss://sketchchain.onrender.com"
 
-    // 🏠 FOR LOCAL TESTING:
-    // Use your laptop's local IP address and port 8080 (must be on same Wi-Fi)
-    // const val SERVER_URL = "ws://192.168.1.28:8080" 
+    // 🏠 FOR LOCAL TESTING (must be on same Wi-Fi):
+    // const val SERVER_URL = "ws://192.168.1.28:8080"
 }
 
 class GameViewModel : ViewModel() {
@@ -46,13 +43,15 @@ class GameViewModel : ViewModel() {
                     is GameMessage.RoomStateUpdate -> {
                         _roomState.value = msg.room
                         _isLoading.value = false
-                        println("✅ Room updated: ${msg.room.id}")
+                        println("✅ Room updated: ${msg.room.id}, players=${msg.room.players.size}")
                     }
                     is GameMessage.GameStateUpdate -> _gameState.value = msg.game
                     is GameMessage.NextTurnAssignment -> _currentAssignment.value = msg
                     is GameMessage.Error -> {
                         _isLoading.value = false
                         _errorMessage.value = msg.message
+                        // On error, disconnect so user can try again cleanly
+                        viewModelScope.launch { client.disconnect() }
                         println("❌ Server Error: ${msg.message}")
                     }
                     else -> {}
@@ -61,25 +60,32 @@ class GameViewModel : ViewModel() {
         }
     }
 
+    /** Called when user clicks "Create New Game" — room code is auto-generated */
+    fun createRoom(playerName: String) {
+        val roomId = generateRoomCode()
+        connectInternal(roomId, playerName, createIfAbsent = true)
+    }
+
+    /** Called when user types an existing code and clicks "Join Game" */
     fun joinRoom(roomId: String, playerName: String) {
+        connectInternal(roomId, playerName, createIfAbsent = false)
+    }
+
+    private fun connectInternal(roomId: String, playerName: String, createIfAbsent: Boolean) {
         myPlayerId = (1..8).map { ('A'..'Z').random() }.joinToString("")
         _isLoading.value = true
-        println("🔌 Trying to connect to room: $roomId as $playerName")
+        println("🔌 Connecting to room: $roomId (create=$createIfAbsent) as $playerName")
 
         viewModelScope.launch {
             try {
-                client.connect(roomId, myPlayerId, playerName)
+                client.connect(roomId, myPlayerId, playerName, createIfAbsent)
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isLoading.value = false
                 _errorMessage.value = e.message ?: "Failed to connect"
-                println("❌ Connection failed: ${e.message}")
             }
         }
-
     }
-
-
 
     fun startGame() {
         val room = _roomState.value ?: return
@@ -101,7 +107,7 @@ class GameViewModel : ViewModel() {
         _errorMessage.value = null
     }
 
-    fun resetGame() {
+    fun leaveRoom() {
         viewModelScope.launch {
             client.disconnect()
             _roomState.value = null
@@ -112,5 +118,12 @@ class GameViewModel : ViewModel() {
         }
     }
 
+    fun resetGame() = leaveRoom()
+
     fun getMyPlayerId(): String = myPlayerId
+
+    private fun generateRoomCode(): String {
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return (1..4).map { chars.random() }.joinToString("")
+    }
 }
