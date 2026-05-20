@@ -109,13 +109,22 @@ fun HomeScreen(
                 )
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = MaterialTheme.colorScheme.onPrimary)
                 } else {
                     Text(
                         "Create New Game",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 }
+            }
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Connecting to server… (first launch may take ~30 sec)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
             }
         } else {
             // Join button
@@ -130,13 +139,22 @@ fun HomeScreen(
                 )
             ) {
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = MaterialTheme.colorScheme.onSecondary)
                 } else {
                     Text(
                         "Join Game",
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
                     )
                 }
+            }
+            if (isLoading) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Joining room $roomId…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
             }
         }
     }

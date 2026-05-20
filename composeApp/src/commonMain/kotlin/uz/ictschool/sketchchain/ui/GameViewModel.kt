@@ -2,8 +2,10 @@ package uz.ictschool.sketchchain.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import uz.ictschool.sketchchain.network.GameClient
 import uz.ictschool.sketchchain.shared.*
 
@@ -74,15 +76,28 @@ class GameViewModel : ViewModel() {
     private fun connectInternal(roomId: String, playerName: String, createIfAbsent: Boolean) {
         myPlayerId = (1..8).map { ('A'..'Z').random() }.joinToString("")
         _isLoading.value = true
+        _errorMessage.value = null
         println("🔌 Connecting to room: $roomId (create=$createIfAbsent) as $playerName")
 
         viewModelScope.launch {
             try {
-                client.connect(roomId, myPlayerId, playerName, createIfAbsent)
+                // Wrap the entire connect + wait-for-first-message in a 25-second timeout.
+                // Render's free tier can take up to 60s on cold start, but 25s is enough to detect
+                // a hang and show a helpful message so the user knows to retry.
+                withTimeout(25_000L) {
+                    client.connect(roomId, myPlayerId, playerName, createIfAbsent)
+                    // Suspend here until isLoading becomes false, which happens when
+                    // RoomStateUpdate or Error arrives from the server.
+                    _isLoading.first { !it }
+                }
+            } catch (e: TimeoutCancellationException) {
+                _isLoading.value = false
+                _errorMessage.value = "☕ Server is waking up — this can take ~30 sec on first use. Please try again!"
+                runCatching { client.disconnect() }
             } catch (e: Exception) {
                 e.printStackTrace()
                 _isLoading.value = false
-                _errorMessage.value = e.message ?: "Failed to connect"
+                _errorMessage.value = e.message ?: "Failed to connect. Check your internet and try again."
             }
         }
     }
