@@ -8,6 +8,7 @@ import io.ktor.server.response.*
 import io.ktor.server.websocket.*
 import io.ktor.websocket.*
 import kotlinx.coroutines.channels.consumeEach
+import kotlinx.coroutines.delay
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import uz.ictschool.sketchchain.shared.*
@@ -16,41 +17,43 @@ import java.time.Duration
 
 fun main() {
     val port = System.getenv("PORT")?.toInt() ?: 8080
-    println("🚀 Starting SketchChain server on port $port")
     embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module)
         .start(wait = true)
 }
 
 fun Application.module() {
     install(WebSockets) {
-        pingPeriod = Duration.ofSeconds(20)
-        timeout = Duration.ofSeconds(60)
+        pingPeriod = Duration.ofSeconds(15)
+        timeout = Duration.ofSeconds(30)
         maxFrameSize = Long.MAX_VALUE
         masking = false
     }
 
     val gameManager = GameManager()
-    // roomId -> (playerId -> session)
-    val connections = ConcurrentHashMap<String, ConcurrentHashMap<String, DefaultWebSocketServerSession>>()
-    val json = Json { ignoreUnknownKeys = true }
+    val connections = ConcurrentHashMap<String, MutableMap<String, DefaultWebSocketServerSession>>()
+    val json = Json {
+        ignoreUnknownKeys = true
+        classDiscriminator = "type"
+    }
 
+    // Always use the polymorphic <GameMessage> type so the discriminator is included
     gameManager.onMessage = { roomId, playerId, message ->
         connections[roomId]?.get(playerId)?.let { session ->
             try {
                 session.send(json.encodeToString<GameMessage>(message))
             } catch (e: Exception) {
-                println("⚠️ Failed to send to $playerId: ${e.message}")
+                println("Failed to send to $playerId: ${e.message}")
             }
         }
     }
 
     gameManager.broadcastToRoom = { roomId, message ->
         val text = json.encodeToString<GameMessage>(message)
-        connections[roomId]?.forEach { (playerId, session) ->
+        connections[roomId]?.values?.forEach { session ->
             try {
                 session.send(text)
             } catch (e: Exception) {
-                println("⚠️ Broadcast failed for $playerId: ${e.message}")
+                println("Broadcast error: ${e.message}")
             }
         }
     }
@@ -61,59 +64,56 @@ fun Application.module() {
         }
 
         webSocket("/game/{roomId}") {
-            val roomId = call.parameters["roomId"]?.uppercase() ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing roomId"))
-                return@webSocket
-            }
-            val playerId = call.request.queryParameters["playerId"] ?: run {
-                close(CloseReason(CloseReason.Codes.VIOLATED_POLICY, "Missing playerId"))
-                return@webSocket
-            }
+            val roomId = call.parameters["roomId"] ?: return@webSocket
+            val playerId = call.request.queryParameters["playerId"] ?: return@webSocket
             val playerName = call.request.queryParameters["playerName"] ?: "Guest"
-            val createIfAbsent = call.request.queryParameters["createIfAbsent"].toBoolean()
-
-            println("🔌 $playerName ($playerId) connecting to room '$roomId' (create=$createIfAbsent)")
-
-            // Register connection FIRST so broadcasts from joinRoom reach the new player
-            val roomConnections = connections.getOrPut(roomId) { ConcurrentHashMap() }
-            roomConnections[playerId] = this
+            // createIfAbsent=true → "Create Room" button. false → "Join Room" button (must already exist).
+            val createIfAbsent = call.request.queryParameters["createIfAbsent"]?.toBoolean() ?: false
 
             val player = Player(playerId, playerName)
 
-            val room: Room? = when {
+            // Register connection BEFORE deciding join/create so broadcasts immediately reach this client
+            val roomConnections = connections.computeIfAbsent(roomId) { ConcurrentHashMap() }
+            roomConnections[playerId] = this
+
+            val room = when {
                 !gameManager.rooms.containsKey(roomId) && createIfAbsent -> {
-                    val created = gameManager.createRoom(roomId, playerId, playerName)
-                    send(json.encodeToString<GameMessage>(GameMessage.RoomStateUpdate(created)))
-                    created
+                    // Create a new room
+                    val createdRoom = gameManager.createRoom(roomId, playerId, playerName)
+                    send(json.encodeToString<GameMessage>(GameMessage.RoomStateUpdate(createdRoom)))
+                    createdRoom
                 }
                 !gameManager.rooms.containsKey(roomId) && !createIfAbsent -> {
-                    send(json.encodeToString<GameMessage>(
-                        GameMessage.Error("Room '$roomId' doesn't exist. Check the code and try again.")
-                    ))
-                    close(CloseReason(CloseReason.Codes.NORMAL, "Room not found"))
+                    // Room doesn't exist, and we were only trying to join
+                    send(json.encodeToString<GameMessage>(GameMessage.Error("Room '$roomId' not found. Double-check the code and try again.")))
+                    delay(300) // give client time to receive message before socket closes
+                    close()
                     roomConnections.remove(playerId)
                     return@webSocket
                 }
                 else -> {
+                    // Room exists — join it. joinRoom broadcasts to everyone (including the new joiner now that they're registered)
                     gameManager.joinRoom(roomId, player)
                 }
             }
 
             if (room == null) {
-                send(json.encodeToString<GameMessage>(
-                    GameMessage.Error("Cannot join room '$roomId' — the game has already started.")
-                ))
-                close(CloseReason(CloseReason.Codes.NORMAL, "Game already started"))
+                send(json.encodeToString<GameMessage>(GameMessage.Error("Could not join room '$roomId'. It may have already started.")))
+                delay(300)
+                close()
                 roomConnections.remove(playerId)
                 return@webSocket
             }
+
+            println("👤 Player $playerName joined room ${room.id} (${room.players.size} players total)")
 
             try {
                 incoming.consumeEach { frame ->
                     if (frame is Frame.Text) {
                         val text = frame.readText()
                         try {
-                            when (val message = json.decodeFromString<GameMessage>(text)) {
+                            val message = json.decodeFromString<GameMessage>(text)
+                            when (message) {
                                 is GameMessage.StartGame -> gameManager.startGame(roomId)
                                 is GameMessage.SubmitTurn -> {
                                     gameManager.submitTurn(roomId, playerId, message.chainId, message.entry)
@@ -121,15 +121,16 @@ fun Application.module() {
                                 else -> {}
                             }
                         } catch (e: Exception) {
-                            println("⚠️ Bad message from $playerName: ${e.message}")
+                            println("⚠️ Failed to parse message: $text — ${e.message}")
                         }
                     }
                 }
             } catch (e: Exception) {
-                println("❌ Connection error for $playerName in room '$roomId': ${e.message}")
+                println("❌ Connection error for $playerName: ${e.message}")
             } finally {
+                // Player disconnected — remove them and handle host reassignment / room deletion
                 roomConnections.remove(playerId)
-                println("🚪 $playerName left room '$roomId'")
+                println("🚪 Player $playerName left room $roomId")
                 gameManager.handlePlayerLeave(roomId, playerId)
             }
         }

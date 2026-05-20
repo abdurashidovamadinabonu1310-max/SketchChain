@@ -2,17 +2,16 @@ package uz.ictschool.sketchchain.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import uz.ictschool.sketchchain.network.GameClient
 import uz.ictschool.sketchchain.shared.*
 
 object AppConfig {
-    // 🌍 PRODUCTION (Render):
+    // 🌍 FOR GOOGLE PLAY (PRODUCTION):
     const val SERVER_URL = "wss://sketchchain.onrender.com"
 
-    // 🏠 LOCAL TESTING (same Wi-Fi):
+    // 🏠 FOR LOCAL TESTING (must be on same Wi-Fi):
     // const val SERVER_URL = "ws://192.168.1.28:8080"
 }
 
@@ -32,9 +31,6 @@ class GameViewModel : ViewModel() {
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _loadingMessage = MutableStateFlow("Connecting...")
-    val loadingMessage: StateFlow<String> = _loadingMessage.asStateFlow()
-
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
@@ -49,19 +45,14 @@ class GameViewModel : ViewModel() {
                         _isLoading.value = false
                         println("✅ Room updated: ${msg.room.id}, players=${msg.room.players.size}")
                     }
-                    is GameMessage.GameStateUpdate -> {
-                        _gameState.value = msg.game
-                        println("🎮 Game state updated: round=${msg.game.currentRound}")
-                    }
-                    is GameMessage.NextTurnAssignment -> {
-                        _currentAssignment.value = msg
-                        println("🎯 Assignment received: ${msg.expectedType}")
-                    }
+                    is GameMessage.GameStateUpdate -> _gameState.value = msg.game
+                    is GameMessage.NextTurnAssignment -> _currentAssignment.value = msg
                     is GameMessage.Error -> {
                         _isLoading.value = false
                         _errorMessage.value = msg.message
+                        // On error, disconnect so user can try again cleanly
                         viewModelScope.launch { client.disconnect() }
-                        println("❌ Server error: ${msg.message}")
+                        println("❌ Server Error: ${msg.message}")
                     }
                     else -> {}
                 }
@@ -69,47 +60,30 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    /** "Create New Game" — generates a room code, always creates on server */
+    /** Called when user clicks "Create New Game" — room code is auto-generated */
     fun createRoom(playerName: String) {
         val roomId = generateRoomCode()
-        connectWithRetry(roomId, playerName, createIfAbsent = true)
+        connectInternal(roomId, playerName, createIfAbsent = true)
     }
 
-    /** "Join Game" — only joins if the room EXISTS; shows error if not */
+    /** Called when user types an existing code and clicks "Join Game" */
     fun joinRoom(roomId: String, playerName: String) {
-        connectWithRetry(roomId.uppercase().trim(), playerName, createIfAbsent = false)
+        connectInternal(roomId, playerName, createIfAbsent = false)
     }
 
-    /**
-     * Retries the WebSocket connection up to [maxAttempts] times.
-     * This handles Render's free-tier cold start (server wakes up in ~15-30s).
-     */
-    private fun connectWithRetry(roomId: String, playerName: String, createIfAbsent: Boolean, maxAttempts: Int = 5) {
+    private fun connectInternal(roomId: String, playerName: String, createIfAbsent: Boolean) {
         myPlayerId = (1..8).map { ('A'..'Z').random() }.joinToString("")
         _isLoading.value = true
-        _errorMessage.value = null
+        println("🔌 Connecting to room: $roomId (create=$createIfAbsent) as $playerName")
 
         viewModelScope.launch {
-            var lastError: String = "Unknown error"
-            for (attempt in 1..maxAttempts) {
-                _loadingMessage.value = if (attempt == 1) "Connecting..." else "Retrying... ($attempt/$maxAttempts)"
-                println("🔌 Connection attempt $attempt/$maxAttempts to room '$roomId'")
-                try {
-                    client.connect(roomId, myPlayerId, playerName, createIfAbsent, viewModelScope)
-                    // Success — the listener will update _roomState when a message arrives
-                    return@launch
-                } catch (e: Exception) {
-                    lastError = e.message ?: "Connection failed"
-                    println("⚠️ Attempt $attempt failed: $lastError")
-                    if (attempt < maxAttempts) {
-                        _loadingMessage.value = "Server waking up... ($attempt/$maxAttempts)"
-                        delay(3000L) // wait 3s before retry
-                    }
-                }
+            try {
+                client.connect(roomId, myPlayerId, playerName, createIfAbsent)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _isLoading.value = false
+                _errorMessage.value = e.message ?: "Failed to connect"
             }
-            // All attempts exhausted
-            _isLoading.value = false
-            _errorMessage.value = "Could not reach server. Please try again.\n($lastError)"
         }
     }
 
@@ -148,11 +122,8 @@ class GameViewModel : ViewModel() {
 
     fun getMyPlayerId(): String = myPlayerId
 
-    override fun onCleared() {
-        super.onCleared()
-        viewModelScope.launch { client.disconnect() }
+    private fun generateRoomCode(): String {
+        val chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        return (1..4).map { chars.random() }.joinToString("")
     }
-
-    private fun generateRoomCode(): String =
-        (1..4).map { ('A'..'Z').random() }.joinToString("")
 }

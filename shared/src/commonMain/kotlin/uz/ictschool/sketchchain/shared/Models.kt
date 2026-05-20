@@ -1,6 +1,5 @@
 package uz.ictschool.sketchchain.shared
 
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -32,7 +31,7 @@ enum class EntryType {
 data class ChainEntry(
     val playerId: String,
     val type: EntryType,
-    val content: String
+    val content: String  // TEXT: sentence string | IMAGE: JSON-encoded DrawingData
 )
 
 @Serializable
@@ -51,32 +50,45 @@ data class Game(
     val totalRounds: Int
 )
 
-/**
- * All messages sent over the WebSocket between server and clients.
- * @SerialName makes the type discriminator short and explicit — required for
- * reliable cross-platform polymorphic deserialization.
- */
+// ── Drawing data model ────────────────────────────────────────────────────────
+// Stored as JSON inside ChainEntry.content when type == IMAGE
+@Serializable
+data class DrawingPoint(val x: Float, val y: Float)
+
+@Serializable
+data class DrawingStroke(
+    val points: List<DrawingPoint>,
+    val colorHex: String = "#FF000000",  // ARGB hex string
+    val strokeWidth: Float = 8f,
+    val isEraser: Boolean = false
+)
+
+@Serializable
+data class DrawingData(
+    val strokes: List<DrawingStroke>,
+    val canvasWidth: Float,
+    val canvasHeight: Float
+)
+
+// ── WebSocket message protocol ────────────────────────────────────────────────
 @Serializable
 sealed class GameMessage {
+    @Serializable
+    data class JoinRoom(val player: Player, val roomId: String) : GameMessage()
 
     @Serializable
-    @SerialName("StartGame")
     data class StartGame(val roomId: String) : GameMessage()
 
     @Serializable
-    @SerialName("SubmitTurn")
     data class SubmitTurn(val roomId: String, val chainId: String, val entry: ChainEntry) : GameMessage()
 
     @Serializable
-    @SerialName("RoomStateUpdate")
     data class RoomStateUpdate(val room: Room) : GameMessage()
 
     @Serializable
-    @SerialName("GameStateUpdate")
     data class GameStateUpdate(val game: Game) : GameMessage()
 
     @Serializable
-    @SerialName("NextTurnAssignment")
     data class NextTurnAssignment(
         val chainId: String,
         val expectedType: EntryType,
@@ -84,6 +96,5 @@ sealed class GameMessage {
     ) : GameMessage()
 
     @Serializable
-    @SerialName("Error")
     data class Error(val message: String) : GameMessage()
 }

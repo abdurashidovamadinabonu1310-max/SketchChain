@@ -16,7 +16,6 @@ fun HomeScreen(
     onCreateRoom: (playerName: String) -> Unit,
     onJoinRoom: (roomId: String, playerName: String) -> Unit,
     isLoading: Boolean,
-    loadingMessage: String,
     errorMessage: String?,
     onClearError: () -> Unit
 ) {
@@ -110,11 +109,7 @@ fun HomeScreen(
                 )
             ) {
                 if (isLoading) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(loadingMessage, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                    }
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
                 } else {
                     Text(
                         "Create New Game",
@@ -135,11 +130,7 @@ fun HomeScreen(
                 )
             ) {
                 if (isLoading) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), color = Color.White)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(loadingMessage, style = MaterialTheme.typography.labelSmall, color = Color.White)
-                    }
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), color = Color.White)
                 } else {
                     Text(
                         "Join Game",
