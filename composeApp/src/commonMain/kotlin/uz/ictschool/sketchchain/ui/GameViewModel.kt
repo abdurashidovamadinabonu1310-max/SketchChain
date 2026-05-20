@@ -2,10 +2,9 @@ package uz.ictschool.sketchchain.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeout
 import uz.ictschool.sketchchain.network.GameClient
 import uz.ictschool.sketchchain.shared.*
 
@@ -79,25 +78,34 @@ class GameViewModel : ViewModel() {
         _errorMessage.value = null
         println("🔌 Connecting to room: $roomId (create=$createIfAbsent) as $playerName")
 
+        // ── Connect attempt ────────────────────────────────────────────────────
+        // No timeout here — Render's free tier can take 30-60s on cold start.
+        // Cancelling early is exactly what was preventing rooms from being created.
         viewModelScope.launch {
             try {
-                // Wrap the entire connect + wait-for-first-message in a 25-second timeout.
-                // Render's free tier can take up to 60s on cold start, but 25s is enough to detect
-                // a hang and show a helpful message so the user knows to retry.
-                withTimeout(25_000L) {
-                    client.connect(roomId, myPlayerId, playerName, createIfAbsent)
-                    // Suspend here until isLoading becomes false, which happens when
-                    // RoomStateUpdate or Error arrives from the server.
-                    _isLoading.first { !it }
-                }
-            } catch (e: TimeoutCancellationException) {
-                _isLoading.value = false
-                _errorMessage.value = "☕ Server is waking up — this can take ~30 sec on first use. Please try again!"
-                runCatching { client.disconnect() }
+                client.connect(roomId, myPlayerId, playerName, createIfAbsent)
+                // Connection established. _isLoading will be set to false
+                // by the message handler when the server sends RoomStateUpdate/Error.
             } catch (e: Exception) {
-                e.printStackTrace()
                 _isLoading.value = false
-                _errorMessage.value = e.message ?: "Failed to connect. Check your internet and try again."
+                _errorMessage.value = "Could not connect. Check your internet and try again."
+                println("❌ Connection error: ${e.message}")
+            }
+        }
+
+        // ── Hint + hard timeout (separate job, does NOT cancel the connection) ─
+        viewModelScope.launch {
+            // After 12s with no response, show an informational hint
+            delay(12_000)
+            if (_isLoading.value) {
+                _errorMessage.value = "☕ Server is waking up — first launch can take ~30 sec. Hang tight!"
+            }
+            // After 75s total, give up
+            delay(63_000) // 12 + 63 = 75 seconds total
+            if (_isLoading.value) {
+                _isLoading.value = false
+                _errorMessage.value = "Couldn't reach the server. Please try again."
+                runCatching { client.disconnect() }
             }
         }
     }
